@@ -1,14 +1,13 @@
-# ESP32-C3 UV Fan Controller
+# FAN UV Mod Controller
 
-Dự án điều khiển quạt và đèn UV LED sử dụng ESP32-C3 Super Mini với hỗ trợ OTA (Over-The-Air) upload.
+Dự án mod lại điều khiển cho [Đèn UV đa năng có quạt hút](https://s.shopee.vn/AKTLCMOglM) sử dụng [ESP32-C3 Super Mini](https://s.shopee.vn/4VUL0G2kbb). Do thiết bị ban đầu chỉ có thể bật/tắt quạt, nên trong quá trình hoạt động quạt sẽ kêu to. Dự án này giúp điều khiển quạt với 4 mức tốc độ khác nhau để giảm tiếng ồn, đồng thời vẫn giữ nguyên chức năng đèn UV LED
 
 ## Tính năng
 
 - **Điều khiển quạt** với 4 mức tốc độ (35%, 50%, 75%, 100%)
 - **Điều khiển đèn UV LED** (bật/tắt)
+- **Bảo vệ xung đột**: Quạt và đèn UV không thể hoạt động cùng lúc (tính năng gốc)
 - **WiFi AP mode với OTA upload** - Upload code không cần dây USB
-- **Bảo vệ xung đột**: Quạt và đèn UV không thể hoạt động cùng lúc
-- **Chống dội nút bấm** để đảm bảo hoạt động ổn định
 
 ## Phần cứng
 
@@ -16,21 +15,25 @@ Dự án điều khiển quạt và đèn UV LED sử dụng ESP32-C3 Super Mini
 
 | Chức năng | GPIO | Loại |
 |-----------|------|------|
-| Nút điều khiển quạt | GPIO 6 | INPUT_PULLUP |
 | Nút điều khiển UV | GPIO 5 | INPUT_PULLUP |
-| Nguồn quạt | GPIO 10 | OUTPUT |
+| Nút điều khiển quạt | GPIO 6 | INPUT_PULLUP |
+| Kích nguồn đèn UV | GPIO 2 | OUTPUT |
+| Kích nguồn quạt | GPIO 10 | OUTPUT |
 | PWM quạt | GPIO 3 | OUTPUT (PWM) |
-| Đèn UV | GPIO 2 | OUTPUT |
 
 ### Linh kiện cần thiết
 
-- ESP32-C3 Super Mini
-- Quạt DC (12V hoặc 5V)
-- Đèn UV LED
-- 2 nút bấm
-- Mạch điều khiển nguồn (relay hoặc MOSFET)
+- [ESP32-C3 Super Mini](https://s.shopee.vn/4VUL0G2kbb)
+- [Đèn UV đa năng có quạt hút](https://s.shopee.vn/AKTLCMOglM)
+![](./photos/fan-uv.jpg)
+- 2 MOSFET N-channel (2N7002 hoặc tương đương, main laptop nhiều)
+![](./photos/mosfet.jpg)
 
 ## Cách sử dụng
+
+- Hàn MOSFET và kết nối phần cứng theo sơ đồ trong [schematic.pdf](./schematic.pdf)
+![](./photos/schematic.jpg)
+![](./photos/pcb.jpg)
 
 ### Nút điều khiển quạt
 - **Single click**: Tăng cấp độ quạt theo chu kỳ
@@ -159,12 +162,8 @@ Mở Serial Monitor với baud rate **115200** để xem:
 
 ## Tác giả
 
-Phát triển cho ESP32-C3 Super Mini
+> [mhqb365](https://www.google.com/search?q=mhqb365)
 
 ## License
 
 MIT License
-
----
-
-**Cập nhật**: Thêm chức năng OTA upload qua WiFi AP mode (December 2025)
