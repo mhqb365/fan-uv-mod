@@ -1,11 +1,12 @@
-# ESP32 UV Fan Controller
+# ESP32-C3 UV Fan Controller
 
-Dự án điều khiển quạt và đèn UV LED sử dụng ESP32-C3 Super Mini.
+Dự án điều khiển quạt và đèn UV LED sử dụng ESP32-C3 Super Mini với hỗ trợ OTA (Over-The-Air) upload.
 
 ## Tính năng
 
 - **Điều khiển quạt** với 4 mức tốc độ (35%, 50%, 75%, 100%)
 - **Điều khiển đèn UV LED** (bật/tắt)
+- **WiFi AP mode với OTA upload** - Upload code không cần dây USB
 - **Bảo vệ xung đột**: Quạt và đèn UV không thể hoạt động cùng lúc
 - **Chống dội nút bấm** để đảm bảo hoạt động ổn định
 
@@ -37,30 +38,133 @@ Dự án điều khiển quạt và đèn UV LED sử dụng ESP32-C3 Super Mini
 - **Double click**: Tắt quạt ngay lập tức
 
 ### Nút điều khiển UV
-- **Click**: Bật/tắt đèn UV LED
+- **Click ngắn**: Bật/tắt đèn UV LED
+- **Giữ 5 giây**: Bật/tắt WiFi AP mode để upload code qua OTA
+
+### WiFi AP Mode & OTA Upload
+
+#### Bật WiFi AP Mode:
+1. **Giữ nút UV 5 giây** → LED UV nhấp nháy 6 lần
+2. **Kết nối WiFi trên máy tính:**
+   - SSID: `FAN-UV-MOD`
+   - Password: `12345678`
+3. **Upload code qua Arduino IDE:**
+   - Mở Arduino IDE
+   - Vào **Tools → Port** → Chọn `ESP32-Fan`
+   - Click **Upload** như bình thường
+4. **Thoát AP mode:** Giữ nút UV 5 giây lần nữa → LED UV nhấp nháy 3 lần
+
+#### Lợi ích OTA:
+- ✅ Upload code không cần dây USB
+- ✅ Tiện lợi khi ESP32 đã được lắp đặt cố định
+- ✅ Password bảo vệ: `12345678`
 
 ### Lưu ý
 - Khi bật quạt, đèn UV sẽ tự động tắt
 - Khi bật đèn UV, quạt sẽ tự động tắt
+- Ở chế độ WiFi AP, nút quạt tạm thời không hoạt động
 - Tần số PWM: 25kHz (phù hợp với hầu hết các loại quạt DC)
 
 ## Cài đặt
 
-1. Cài đặt [Arduino IDE](https://www.arduino.cc/en/software)
-2. Thêm ESP32 board support:
-   - Vào **File > Preferences**
-   - Thêm URL: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
-3. Cài đặt board **ESP32** từ Board Manager
-4. Chọn board: **ESP32C3 Dev Module**
-5. Upload code vào ESP32-C3
+### Yêu cầu phần mềm
+1. [Arduino IDE](https://www.arduino.cc/en/software) (phiên bản 2.0 trở lên)
+2. ESP32 board support
+3. Thư viện ArduinoOTA (có sẵn trong ESP32 package)
+
+### Hướng dẫn cài đặt
+1. **Cài đặt Arduino IDE**
+   
+2. **Thêm ESP32 board support:**
+   - Vào **File → Preferences**
+   - Thêm URL vào "Additional Board Manager URLs":
+     ```
+     https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+     ```
+   - Vào **Tools → Board → Boards Manager**
+   - Tìm và cài đặt **esp32** by Espressif Systems
+   
+3. **Cấu hình board:**
+   - **Board**: ESP32C3 Dev Module
+   - **USB CDC On Boot**: Enabled (quan trọng!)
+   - **CPU Frequency**: 160MHz
+   - **Flash Size**: 4MB
+   - **Partition Scheme**: Default 4MB with spiffs
+   
+4. **Upload code lần đầu:**
+   - Kết nối ESP32-C3 qua USB
+   - Chọn đúng COM port
+   - Click Upload
+   
+5. **Upload lần sau qua OTA:**
+   - Giữ nút UV 5 giây để bật WiFi AP
+   - Kết nối WiFi `FAN-UV-MOD`
+   - Chọn port `ESP32-Fan` và upload
 
 ## Thông số kỹ thuật
 
+### PWM
 - Tần số PWM: 25kHz
 - Độ phân giải PWM: 8-bit (0-255)
+- Các mức PWM:
+  - OFF: 0 (0%)
+  - Level 1: 90 (~35%)
+  - Level 2: 128 (50%)
+  - Level 3: 191 (75%)
+  - Level 4: 255 (100%)
+
+### Timing
 - Thời gian chống dội: 50ms
 - Thời gian double click: 300ms
+- Thời gian long press (WiFi AP): 5000ms (5 giây)
+
+### WiFi AP
+- SSID: FAN-UV-MOD
+- Password: 12345678
+- Default IP: 192.168.4.1
+- OTA Hostname: ESP32-Fan
+- OTA Password: 12345678
+
+## Xử lý sự cố
+
+### ESP32 mất kết nối USB
+- **Nguyên nhân**: Code có lỗi hoặc tắt Serial
+- **Giải pháp**: 
+  1. Rút USB
+  2. Giữ nút BOOT trên ESP32-C3
+  3. Cắm lại USB (vẫn giữ BOOT)
+  4. Thả BOOT sau 2 giây
+  5. Upload code mới
+
+### Không thấy port OTA trong Arduino IDE
+- **Kiểm tra**:
+  1. Đã giữ nút UV 5 giây? (LED nhấp nháy 6 lần)
+  2. Đã kết nối WiFi `FAN-UV-MOD`?
+  3. Đợi 10-20 giây sau khi kết nối WiFi
+  4. Restart Arduino IDE
+- **Serial Monitor**: Kiểm tra IP address và thông báo OTA
+
+### Quạt/UV không hoạt động
+- Kiểm tra kết nối phần cứng
+- Kiểm tra nguồn điện cho relay/MOSFET
+- Xem log trên Serial Monitor (115200 baud)
+
+## Debug
+
+Mở Serial Monitor với baud rate **115200** để xem:
+- Trạng thái quạt/UV
+- Thông báo nhấn nút
+- IP address khi bật WiFi AP
+- Tiến trình OTA upload
+
+## Tác giả
+
+Phát triển cho ESP32-C3 Super Mini
 
 ## License
 
 MIT License
+
+---
+
+**Cập nhật**: Thêm chức năng OTA upload qua WiFi AP mode (December 2025)

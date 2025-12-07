@@ -2,10 +2,15 @@
  * ESP32-C3 Super Mini - Fan Control with UV LED
  * - Nút quạt: Click để tăng cấp độ (OFF -> 35% -> 50% -> 75% -> 100% -> OFF...)
  * - Nút UV: Click để bật/tắt đèn UV
+ * - Nút UV: Giữ 5 giây để bật/tắt WiFi AP mode cho upload code OTA
  * - Quạt và đèn UV không chạy cùng lúc
  * - Logic UV_PIN: HIGH = BẬT, LOW = TẮT
  * - Logic FAN_POWER_PIN: HIGH = BẬT, LOW = TẮT
  */
+
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <ArduinoOTA.h>
 
 // Định nghĩa chân (5 chân: 2 nút input, 2 bật/tắt output, 1 PWM output)
 const int UV_BUTTON_PIN = 5;   // Nút điều khiển UV (INPUT)
@@ -35,9 +40,15 @@ bool waitingForFanDoubleClick = false;
 bool lastUvButtonState = HIGH;
 bool uvButtonState = HIGH;
 unsigned long lastUvDebounceTime = 0;
+unsigned long uvButtonPressTime = 0;
+bool uvButtonHeld = false;
+
+// WiFi AP mode
+bool wifiAPMode = false;
 
 const unsigned long debounceDelay = 50;      // Thời gian chống dội nút bấm (ms)
 const unsigned long doubleClickTime = 300;   // Thời gian tối đa giữa 2 lần nhấn (ms)
+const unsigned long longPressTime = 5000;    // Thời gian giữ nút để bật/tắt WiFi AP (5 giây)
 
 // Forward declarations
 void IRAM_ATTR tachInterrupt();
@@ -79,12 +90,21 @@ void setup() {
   Serial.println("\nControls:");
   Serial.println("- Fan button: Single click = cycle speed (OFF->35%->50%->75%->100%), Double click = OFF");
   Serial.println("- UV button: Click to toggle UV LED");
+  Serial.println("- UV button: Hold 5 seconds to enable/disable WiFi AP mode for OTA upload");
   Serial.println("- Fan and UV cannot run simultaneously");
   Serial.println("- UV_PIN: HIGH=ON, LOW=OFF");
   Serial.println("- FAN_POWER_PIN: HIGH=ON, LOW=OFF");
 }
 
 void loop() {
+  // Xử lý WiFi AP mode nếu đã bật
+  if (wifiAPMode) {
+    ArduinoOTA.handle();
+    // Vẫn kiểm tra nút UV để có thể thoát AP mode
+    handleUvButton();
+    return;
+  }
+  
   // Xử lý nút điều khiển quạt
   handleFanButton();
   
@@ -133,6 +153,25 @@ void handleFanButton() {
 void handleUvButton() {
   int reading = digitalRead(UV_BUTTON_PIN);
   
+  // Phát hiện khi nút được nhấn xuống
+  if (reading == LOW && lastUvButtonState == HIGH) {
+    uvButtonPressTime = millis();
+    uvButtonHeld = false;
+  }
+  
+  // Kiểm tra nếu nút đang được giữ
+  if (reading == LOW && !uvButtonHeld) {
+    if (millis() - uvButtonPressTime >= longPressTime) {
+      // Nút được giữ đủ 5 giây - Toggle WiFi AP
+      uvButtonHeld = true;
+      if (wifiAPMode) {
+        disableWiFiAP();
+      } else {
+        enableWiFiAP();
+      }
+    }
+  }
+  
   if (reading != lastUvButtonState) {
     lastUvDebounceTime = millis();
   }
@@ -141,8 +180,11 @@ void handleUvButton() {
     if (reading != uvButtonState) {
       uvButtonState = reading;
       
-      if (uvButtonState == LOW) {
-        toggleUV();
+      // Chỉ toggle UV nếu là nhấn ngắn (thả nút trước 5 giây) và không ở chế độ AP
+      if (uvButtonState == HIGH && !uvButtonHeld && !wifiAPMode) {
+        if (millis() - uvButtonPressTime < longPressTime) {
+          toggleUV();
+        }
       }
     }
   }
@@ -229,4 +271,103 @@ void setFanSpeed(int level) {
   }
   
   ledcWrite(FAN_PWM_PIN, PWM_LEVELS[level]);
+}
+
+// Hàm bật WiFi AP mode với OTA
+void enableWiFiAP() {
+  Serial.println("\n*** ENABLING WIFI AP MODE WITH OTA ***");
+  
+  // Tắt quạt và UV
+  if (fanOn) {
+    turnOffFan();
+  }
+  if (uvOn) {
+    uvOn = false;
+    digitalWrite(UV_PIN, LOW);
+  }
+  
+  // Bật WiFi AP
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("FAN-UV-MOD", "12345678");
+  
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("\nAP IP address: ");
+  Serial.println(IP);
+  Serial.println("SSID: FAN-UV-MOD");
+  Serial.println("Password: 12345678");
+  
+  // Cấu hình ArduinoOTA
+  ArduinoOTA.setHostname("ESP32-Fan");
+  ArduinoOTA.setPassword("12345678");
+  
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else {
+      type = "filesystem";
+    }
+    Serial.println("Start updating " + type);
+  });
+  
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    }
+  });
+  
+  ArduinoOTA.begin();
+  
+  Serial.println("\n=== OTA Ready ===");
+  Serial.println("Arduino IDE: Tools -> Port -> ESP32-Fan");
+  Serial.println("Hold UV button 5s again to exit AP mode");
+  
+  wifiAPMode = true;
+  
+  // Nhấp nháy LED UV để báo hiệu đã vào chế độ WiFi AP
+  for (int i = 0; i < 6; i++) {
+    digitalWrite(UV_PIN, HIGH);
+    delay(200);
+    digitalWrite(UV_PIN, LOW);
+    delay(200);
+  }
+}
+
+// Hàm tắt WiFi AP mode
+void disableWiFiAP() {
+  Serial.println("\n*** DISABLING WIFI AP MODE ***");
+  
+  // Tắt OTA và WiFi
+  ArduinoOTA.end();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  
+  wifiAPMode = false;
+  
+  Serial.println("WiFi AP disabled. Normal operation resumed.");
+  
+  // Nhấp nháy LED UV để báo hiệu đã thoát chế độ WiFi AP
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(UV_PIN, HIGH);
+    delay(100);
+    digitalWrite(UV_PIN, LOW);
+    delay(100);
+  }
 }
